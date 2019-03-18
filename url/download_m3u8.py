@@ -56,7 +56,7 @@ class VideoDownload:
     def transfer(self, file):
         self.m3u8_list.sort()
         length = len(self.m3u8_list) 
-        maxfile = 1000  # 最大文件打开个数 ulimit -n 2000
+        maxfile = 200  # 最大文件打开个数 ulimit -n 2000
         outfiles = []
         for i in range(0, length, maxfile):
             to_file = '{}.mp4'.format(i)
