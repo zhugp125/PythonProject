@@ -6,6 +6,7 @@ import requests
 import re
 import sys
 from Crypto.Cipher import AES
+from multiprocessing import Pool
 
 def download(url):
     headers = {'user-agent': 'Mozilla/5.0 (Macintosh; U; Intel Mac OS X 10_6_8; en-us) AppleWebKit/534.50'}
@@ -22,11 +23,49 @@ def parse(text, pattern):
     for iter in re.finditer(pattern, text, re.M):
         yield iter.group()[1:]
 
-def write_url(url, cryptor, f):
-    f.write(cryptor.decrypt(download(url).content))
+def remove_list(m3u8_list):
+    for m3u8 in m3u8_list:
+        os.remove(m3u8)
 
-def transfer(from_file, to_file):
-    os.system('ffmpeg -y -i \"{}\" -c:v libx264 -c:a copy -bsf:a aac_adtstoasc \"{}\"'.format(from_file, to_file))
+class VideoDownload:
+    def __init__(self, url, key):
+        self.key = key
+        self.m3u8_list = []
+        self.url = url
+
+    def write(self, url, file):
+        cryptor = AES.new(self.key, AES.MODE_CBC, self.key)
+        with open(file, 'wb') as f:
+            f.write(cryptor.decrypt(download(url).content))
+
+    def start(self, text, pattern):
+        p = Pool(4)
+        for m3u8 in parse(text, pattern):
+            self.m3u8_list.append(m3u8)
+            #print('url: ', os.path.join(self.url, m3u8))
+            p.apply_async(self.write, args=(os.path.join(self.url, m3u8), m3u8))
+        p.close()
+        p.join()
+
+    def get_list(self):
+        return self.m3u8_list
+
+    def __transfer(self, from_file, to_file):
+        os.system('ffmpeg -i "concat:{}" -c copy \"{}\"'.format(from_file, to_file))
+
+    def transfer(self, file):
+        self.m3u8_list.sort()
+        length = len(self.m3u8_list) 
+        maxfile = 1000  # 最大文件打开个数 ulimit -n 2000
+        outfiles = []
+        for i in range(0, length, maxfile):
+            to_file = '{}.mp4'.format(i)
+            outfiles.append(to_file)
+            self.__transfer('|'.join(self.m3u8_list[i:i+maxfile]), to_file)
+        self.__transfer('|'.join(outfiles), file)
+
+        remove_list(outfiles)
+        remove_list(self.m3u8_list)
 
 if __name__ == '__main__':
     if len(sys.argv) is not 2:
@@ -41,7 +80,6 @@ if __name__ == '__main__':
 
     while True:
         text = download(url).text
-        #print('url_____________', url)
         if not text.startswith('#EXTM3U'):
             raise BaseException('m3u8 error url')
 
@@ -56,18 +94,11 @@ if __name__ == '__main__':
     key = get(text, r'#EXT-X-KEY:METHOD=.*,URI="(.*)"')
     #print('encry: {}, key: {}'.format(encry, key))
     # 密钥
-    url_pre = url.rsplit('/', 1)[0]
-    #print('url............. ', url_pre)
-    key_data = download(os.path.join(url_pre, key)).content
+    key_data = download(os.path.join(url.rsplit('/', 1)[0], key)).content
     #print('key data: ', key_data)
-    cryptor = AES.new(key_data, AES.MODE_CBC, key_data)
-    
-    from_file = filename + '.ts'
-    with open(from_file, 'wb') as f:
-        for m3u8 in parse(text, r'$\n[A-Za-z0-9]+.ts'):
-            m3u8_url = os.path.join(url_pre, m3u8)
-            print('url: ', m3u8_url)
-            write_url(m3u8_url, cryptor, f)
-
-    to_file = filename + '.mp4'
-    transfer(from_file, to_file)
+    video_download = VideoDownload(url.rsplit('/', 1)[0], key_data)
+    print('download begin')
+    video_download.start(text, r'$\n[A-Za-z0-9]+.ts')
+    print('download end')
+    video_download.transfer(filename + '.mp4')
+    print('transfer end')
