@@ -54,7 +54,6 @@ class VideoDownload:
         os.system('ffmpeg -i "concat:{}" -c copy \"{}\"'.format(from_file, to_file))
 
     def transfer(self, file):
-        self.m3u8_list.sort()
         length = len(self.m3u8_list) 
         outfiles = []
         maxfile = 200  # 最大文件打开个数 ulimit -n 2000
