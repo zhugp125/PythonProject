@@ -9,8 +9,11 @@ from Crypto.Cipher import AES
 from multiprocessing import Pool
 
 def download(url):
-    headers = {'user-agent': 'Mozilla/5.0 (Macintosh; U; Intel Mac OS X 10_6_8; en-us) AppleWebKit/534.50'}
-    return requests.get(url, headers = headers)
+    headers = {'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_14_3) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/73.0.3683.86 Safari/537.36'}
+    try:
+        return requests.get(url, headers=headers, timeout=5)
+    except requests.exceptions.Timeout:
+        return None
 
 def get(text, pattern):
     obj = re.search(pattern, text, re.M)
@@ -36,19 +39,21 @@ class VideoDownload:
     def write(self, url, file):
         cryptor = AES.new(self.key, AES.MODE_CBC, self.key)
         with open(file, 'wb') as f:
-            f.write(cryptor.decrypt(download(url).content))
+            print('download ts: ', url)
+            r = download(url)
+            if r is not None and r.status_code == 200:
+                f.write(cryptor.decrypt(r.content))
 
     def start(self, text, pattern):
-        p = Pool(4)
+        self.m3u8_list.clear()
         for m3u8 in parse(text, pattern):
             self.m3u8_list.append(m3u8)
-            #print('url: ', os.path.join(self.url, m3u8))
+        
+        p = Pool(4)
+        for m3u8 in self.m3u8_list:
             p.apply_async(self.write, args=(os.path.join(self.url, m3u8), m3u8))
         p.close()
         p.join()
-
-    def get_list(self):
-        return self.m3u8_list
 
     def __transfer(self, from_file, to_file):
         os.system('ffmpeg -i "concat:{}" -c copy \"{}\"'.format(from_file, to_file))
