@@ -79,10 +79,10 @@ if __name__ == '__main__':
 
     text = download(sys.argv[1]).text.encode('latin1').decode('utf-8')
     # 获取m3u8的地址
-    url = get(text, r"video: '(.*)'")
+    url = get(text, r'([a-zA-z]+://[^\s]*.m3u8)')
     # 获取视频的名称
-    filename = get(text, r'<title>(.*)</title>')
-    #print('url: {}\nfile: {}'.format(url, filename))
+    filename = get(text, r'<h1 class="h1">(.*)</h1>')
+    print('url: {}\nfile: {}'.format(url, filename))
 
     while True:
         text = download(url).text
